@@ -6,6 +6,9 @@ set -Eeuo pipefail
 
 MIHOMO_REPO="${MIHOMO_REPO:-MetaCubeX/mihomo}"
 ZASHBOARD_REPO="${ZASHBOARD_REPO:-Zephyruso/zashboard}"
+PROJECT_REPO="${PROJECT_REPO:-jiumian8/clash-for-linux-install}"
+PROJECT_BRANCH="${PROJECT_BRANCH:-main}"
+MIHOMO_URL="${MIHOMO_URL:-}"
 INSTALL_DIR="${INSTALL_DIR:-/opt/mihomo}"
 CONFIG_DIR="${CONFIG_DIR:-/etc/mihomo}"
 BIN_DIR="${BIN_DIR:-/usr/local/bin}"
@@ -61,6 +64,10 @@ curl_gh(){
   curl -fL --retry 3 -A "clash-for-linux-install/1.0" -o "$out" "$(gh_url "$url")"
 }
 
+repo_raw_url(){
+  printf 'https://raw.githubusercontent.com/%s/%s/%s\n' "$PROJECT_REPO" "$PROJECT_BRANCH" "$1"
+}
+
 install_deps(){
   local missing=()
   for c in curl grep sed awk tar gzip unzip chmod chown mkdir systemctl ss; do has "$c" || missing+=("$c"); done
@@ -106,28 +113,71 @@ get_latest_asset(){
 }
 
 download_mihomo(){
-  local arch="$1" tmp="$2" url=""
+  local arch="$1" tmp="$2" url="" candidates=()
   info "检测到系统架构：$arch"
-  if [[ "$arch" == "amd64" ]]; then
-    url="$(get_latest_asset "$MIHOMO_REPO" "mihomo-linux-${arch}.*compatible.*\.gz$" "\.deb|\.rpm" || true)"
+
+  if [[ -n "${MIHOMO_URL:-}" ]]; then
+    info "使用指定 Mihomo 下载地址：$MIHOMO_URL"
+    curl_gh "$tmp/mihomo.gz" "$MIHOMO_URL"
+  else
+    if [[ "$arch" == "amd64" ]]; then
+      candidates+=("archives/mihomo-linux-amd64-compatible.gz")
+      candidates+=("archives/mihomo-linux-amd64.gz")
+    else
+      candidates+=("archives/mihomo-linux-${arch}.gz")
+    fi
+
+    for f in "${candidates[@]}"; do
+      url="$(repo_raw_url "$f")"
+      info "尝试从本仓库离线包下载 Mihomo：$f"
+      if curl_gh "$tmp/mihomo.gz" "$url"; then
+        break
+      fi
+      rm -f "$tmp/mihomo.gz"
+    done
+
+    if [[ ! -s "$tmp/mihomo.gz" ]]; then
+      warn "本仓库 archives/ 未找到 ${arch} 内核包，尝试 GitHub Release。"
+      if [[ "$arch" == "amd64" ]]; then
+        url="$(get_latest_asset "$MIHOMO_REPO" "mihomo-linux-${arch}.*compatible.*\.gz$" "\.deb|\.rpm" || true)"
+      fi
+      [[ -n "$url" ]] || url="$(get_latest_asset "$MIHOMO_REPO" "mihomo-linux-${arch}.*\.gz$" "\.deb|\.rpm" || true)"
+      if [[ -n "$url" ]]; then
+        info "下载 Mihomo：$url"
+        curl_gh "$tmp/mihomo.gz" "$url"
+      fi
+    fi
   fi
-  [[ -n "$url" ]] || url="$(get_latest_asset "$MIHOMO_REPO" "mihomo-linux-${arch}.*\.gz$" "\.deb|\.rpm" || true)"
-  [[ -n "$url" ]] || { err "没有找到适合 ${arch} 的 mihomo release 资源"; exit 1; }
-  info "下载 Mihomo：$url"
-  curl_gh "$tmp/mihomo.gz" "$url"
+
+  if [[ ! -s "$tmp/mihomo.gz" ]]; then
+    warn "没有自动找到适合 ${arch} 的 Mihomo 内核。"
+    echo "你可以："
+    echo "1) 把内核包上传到仓库 archives/，例如 amd64 放 archives/mihomo-linux-amd64-compatible.gz"
+    echo "2) 现在粘贴 Mihomo .gz 直链继续安装"
+    read -r -p "请输入 Mihomo .gz 下载地址（留空退出）：" manual_url
+    [[ -n "$manual_url" ]] || { err "未提供 Mihomo 内核下载地址，安装退出。"; exit 1; }
+    curl_gh "$tmp/mihomo.gz" "$manual_url"
+  fi
+
+  [[ -s "$tmp/mihomo.gz" ]] || { err "Mihomo 内核下载失败。"; exit 1; }
   gzip -dc "$tmp/mihomo.gz" > "$INSTALL_DIR/bin/mihomo"
   chmod +x "$INSTALL_DIR/bin/mihomo"
 }
 
 download_zashboard(){
   local tmp="$1" url=""
-  url="$(get_latest_asset "$ZASHBOARD_REPO" "(dist|zashboard).*\.zip$" || true)"
-  if [[ -z "$url" ]]; then
-    warn "未找到 Zashboard release zip，尝试下载 gh-pages 分支"
-    url="https://github.com/${ZASHBOARD_REPO}/archive/refs/heads/gh-pages.zip"
+  url="$(repo_raw_url "archives/dist.zip")"
+  info "尝试从本仓库离线包下载 Zashboard：archives/dist.zip"
+  if ! curl_gh "$tmp/zashboard.zip" "$url"; then
+    rm -f "$tmp/zashboard.zip"
+    url="$(get_latest_asset "$ZASHBOARD_REPO" "(dist|zashboard).*\.zip$" || true)"
+    if [[ -z "$url" ]]; then
+      warn "未找到 Zashboard release zip，尝试下载 gh-pages 分支"
+      url="https://github.com/${ZASHBOARD_REPO}/archive/refs/heads/gh-pages.zip"
+    fi
+    info "下载 Zashboard：$url"
+    curl_gh "$tmp/zashboard.zip" "$url"
   fi
-  info "下载 Zashboard：$url"
-  curl_gh "$tmp/zashboard.zip" "$url"
   rm -rf "$INSTALL_DIR/ui"
   mkdir -p "$INSTALL_DIR/ui"
   unzip -q "$tmp/zashboard.zip" -d "$tmp/zashboard"

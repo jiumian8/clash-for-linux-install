@@ -6,30 +6,32 @@
 
 ## 一键安装
 
-国内网络建议使用 GitHub 加速地址拉取安装脚本。下面 3 个任选一个，把 `jiumian8` 替换成你的真实 GitHub 用户名。
+国内网络建议使用 GitHub 加速地址拉取安装脚本。下面 3 个任选一个，仓库用户名已配置为 `jiumian8`。
+
+> 为避免 GitHub / 加速源缓存到 Windows CRLF 换行版本，下面命令都加了 `tr -d '\r'`，会在执行前自动清理回车符。
 
 ### 方式 1：IPv4 优选加速
 
 ```bash
-bash <(curl -fsSL https://v4.gh-proxy.org/https://raw.githubusercontent.com/jiumian8/clash-for-linux-install/main/install.sh)
+bash <(curl -fsSL 'https://v4.gh-proxy.org/https://raw.githubusercontent.com/jiumian8/clash-for-linux-install/main/install.sh?cache=lf' | tr -d '\r')
 ```
 
 ### 方式 2：IPv6 / IPv4 优选加速
 
 ```bash
-bash <(curl -fsSL https://v6.gh-proxy.org/https://raw.githubusercontent.com/jiumian8/clash-for-linux-install/main/install.sh)
+bash <(curl -fsSL 'https://v6.gh-proxy.org/https://raw.githubusercontent.com/jiumian8/clash-for-linux-install/main/install.sh?cache=lf' | tr -d '\r')
 ```
 
 ### 方式 3：Fastly CDN 节点加速
 
 ```bash
-bash <(curl -fsSL https://cdn.gh-proxy.org/https://raw.githubusercontent.com/jiumian8/clash-for-linux-install/main/install.sh)
+bash <(curl -fsSL 'https://cdn.gh-proxy.org/https://raw.githubusercontent.com/jiumian8/clash-for-linux-install/main/install.sh?cache=lf' | tr -d '\r')
 ```
 
 也可以直连 GitHub：
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/jiumian8/clash-for-linux-install/main/install.sh)
+bash <(curl -fsSL 'https://raw.githubusercontent.com/jiumian8/clash-for-linux-install/main/install.sh?cache=lf' | tr -d '\r')
 ```
 
 如果你是先 clone 本仓库，也可以执行：
@@ -38,6 +40,14 @@ bash <(curl -fsSL https://raw.githubusercontent.com/jiumian8/clash-for-linux-ins
 git clone https://github.com/jiumian8/clash-for-linux-install.git
 cd clash-for-linux-install
 sudo bash install.sh
+```
+
+如果仍然报 CRLF 相关错误，用下面的分步命令排查：
+
+```bash
+curl -fsSL 'https://v4.gh-proxy.org/https://raw.githubusercontent.com/jiumian8/clash-for-linux-install/main/install.sh?cache=lf' -o install.sh
+tr -d '\r' < install.sh > install.lf.sh
+bash install.lf.sh
 ```
 
 安装开始后，脚本会让用户选择 GitHub 加速源，用于后续下载 Mihomo 内核、Zashboard 面板和升级内核：
@@ -92,6 +102,38 @@ SSH 中输入 clash 可打开管理菜单。
 | SSH 菜单管理 | SSH 输入 `clash` 即可进入中文管理菜单 |
 | 完整卸载 | 卸载时清理 systemd 服务、二进制、配置、日志、菜单命令 |
 
+
+
+## 离线内核包说明：避免 GitHub API 403
+
+脚本会优先从本仓库的 `archives/` 目录下载离线包，避免安装时访问 `api.github.com` 导致 403。
+
+请至少准备当前服务器架构对应的 Mihomo 内核包：
+
+| 服务器架构 | 推荐文件名 | 放置路径 |
+| --- | --- | --- |
+| `amd64` / `x86_64` | `mihomo-linux-amd64-compatible.gz` | `archives/mihomo-linux-amd64-compatible.gz` |
+| `amd64` / `x86_64` | `mihomo-linux-amd64.gz` | `archives/mihomo-linux-amd64.gz` |
+| `arm64` / `aarch64` | `mihomo-linux-arm64.gz` | `archives/mihomo-linux-arm64.gz` |
+| `armv7` | `mihomo-linux-armv7.gz` | `archives/mihomo-linux-armv7.gz` |
+| `armv6` | `mihomo-linux-armv6.gz` | `archives/mihomo-linux-armv6.gz` |
+| `386` / `i386` / `i686` | `mihomo-linux-386.gz` | `archives/mihomo-linux-386.gz` |
+
+Zashboard 离线包建议放在：
+
+```text
+archives/dist.zip
+```
+
+本仓库已经带有 `archives/dist.zip` 时，安装脚本会优先使用它。
+
+如果你不想把 Mihomo 内核包放进仓库，也可以安装时手动指定下载地址：
+
+```bash
+MIHOMO_URL='https://你的镜像地址/mihomo-linux-amd64-compatible.gz' \
+bash <(curl -fsSL 'https://v4.gh-proxy.org/https://raw.githubusercontent.com/jiumian8/clash-for-linux-install/main/install.sh?cache=offline' | tr -d '\r')
+```
+
 ## SSH 菜单使用方法
 
 安装完成后，在 SSH 中输入：
@@ -145,7 +187,7 @@ clash ui               # 显示 Zashboard 地址和密钥
 | `/etc/mihomo/env` | 订阅链接、GitHub 加速源、端口、密钥等运行变量 |
 | `/etc/mihomo/mixin.yaml` | Mixin 配置，管理端口、TUN、DNS、面板等 |
 | `/etc/mihomo/subscription.yaml` | 订阅拉取后的原始配置 |
-| `/etc/mihomo/runtime.yaml` | 实际运行配置，由 `mixin.yaml + subscription.yaml` 合并生成 |
+| `/etc/mihomo/runtime.yaml` | 实际运行配置，由清理后的订阅配置 + `mixin.yaml` 合并生成 |
 | `/etc/systemd/system/mihomo.service` | systemd 服务 |
 | `/usr/local/bin/clash` | SSH 管理菜单命令 |
 | `/var/log/mihomo.log` | 运行日志 |
