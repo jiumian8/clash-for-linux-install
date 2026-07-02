@@ -285,6 +285,19 @@ import_subscription(){
   success "订阅已导入：$CONFIG_DIR/subscription.yaml"
 }
 
+
+validate_config(){
+  info "校验 Mihomo 配置"
+  if "$INSTALL_DIR/bin/mihomo" -t -d "$CONFIG_DIR" -f "$CONFIG_DIR/runtime.yaml"; then
+    success "Mihomo 配置校验通过"
+  else
+    err "Mihomo 配置校验失败，请检查订阅或 mixin 配置。"
+    echo "可手动执行：$INSTALL_DIR/bin/mihomo -t -d $CONFIG_DIR -f $CONFIG_DIR/runtime.yaml"
+    echo "如需查看当前配置：sed -n '1,220p' $CONFIG_DIR/runtime.yaml"
+    exit 1
+  fi
+}
+
 install_service(){
   cat > "/etc/systemd/system/${SERVICE_NAME}.service" <<EOF
 [Unit]
@@ -303,8 +316,8 @@ ExecStart=$INSTALL_DIR/bin/mihomo -d $CONFIG_DIR -f $CONFIG_DIR/runtime.yaml
 Restart=on-failure
 RestartSec=5s
 LimitNOFILE=1048576
-StandardOutput=append:/var/log/mihomo.log
-StandardError=append:/var/log/mihomo.log
+StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=multi-user.target
@@ -358,8 +371,8 @@ mixin_menu(){ root; load; echo "当前端口：mixed=$MIXED_PORT http=$HTTP_PORT
 detect_arch(){ case "$(uname -m)" in x86_64|amd64) echo amd64;; aarch64|arm64) echo arm64;; armv7l|armv7) echo armv7;; armv6l|armv6) echo armv6;; i386|i686) echo 386;; *) err "不支持架构：$(uname -m)"; exit 1;; esac; }
 asset(){ curl -fsSL "$(gh_url "https://api.github.com/repos/$1/releases/latest")" | grep -oE '"browser_download_url"[[:space:]]*:[[:space:]]*"[^"]+"' | sed -E 's/^.*"(https:[^"]+)".*$/\1/' | grep -Ei "$2" | grep -Eiv "${3:-$^}" | head -n1; }
 upgrade_core(){ root; local arch url tmp; arch="$(detect_arch)"; read -r -p "指定 Mihomo 下载 URL（留空自动下载最新版）：" url; if [[ -z "$url" ]]; then [[ "$arch" == amd64 ]] && url="$(asset "$MIHOMO_REPO" "mihomo-linux-${arch}.*compatible.*\.gz$" "\.deb|\.rpm" || true)"; [[ -n "$url" ]] || url="$(asset "$MIHOMO_REPO" "mihomo-linux-${arch}.*\.gz$" "\.deb|\.rpm" || true)"; fi; [[ -n "$url" ]] || { err "未找到内核下载地址"; exit 1; }; tmp="$(mktemp -d)"; curl_gh "$tmp/mihomo.gz" "$url"; gzip -dc "$tmp/mihomo.gz" > "$INSTALL_DIR/bin/mihomo.new"; chmod +x "$INSTALL_DIR/bin/mihomo.new"; mv "$INSTALL_DIR/bin/mihomo.new" "$INSTALL_DIR/bin/mihomo"; rm -rf "$tmp"; restart; "$INSTALL_DIR/bin/mihomo" -v || true; }
-diagnose(){ load; echo "== 服务状态 =="; systemctl --no-pager status "$SERVICE_NAME" || true; echo; echo "== 端口监听 =="; ss -lntup | grep -E "(${MIXED_PORT:-7890}|${HTTP_PORT:-7891}|${SOCKS_PORT:-7892}|${CONTROLLER_PORT:-9090})" || true; echo; echo "== 版本 =="; "$INSTALL_DIR/bin/mihomo" -v || true; echo; echo "== Zashboard =="; show_access; echo "== 最近日志 =="; journalctl -u "$SERVICE_NAME" -n 80 --no-pager || tail -n 80 /var/log/mihomo.log || true; }
-logs(){ journalctl -u "$SERVICE_NAME" -f --no-pager || tail -f /var/log/mihomo.log; }
+diagnose(){ load; echo "== 服务状态 =="; systemctl --no-pager status "$SERVICE_NAME" || true; echo; echo "== 端口监听 =="; ss -lntup | grep -E "(${MIXED_PORT:-7890}|${HTTP_PORT:-7891}|${SOCKS_PORT:-7892}|${CONTROLLER_PORT:-9090})" || true; echo; echo "== 版本 =="; "$INSTALL_DIR/bin/mihomo" -v || true; echo; echo "== Zashboard =="; show_access; echo "== 最近日志 =="; journalctl -u "$SERVICE_NAME" -n 120 --no-pager || true; }
+logs(){ journalctl -u "$SERVICE_NAME" -f --no-pager; }
 uninstall(){ root; read -r -p "确认卸载并清理所有安装内容？[y/N] " y; [[ "$y" =~ ^[Yy]$ ]] || exit 0; systemctl disable --now "$SERVICE_NAME" 2>/dev/null || true; rm -f "/etc/systemd/system/${SERVICE_NAME}.service"; systemctl daemon-reload || true; rm -rf "$INSTALL_DIR" "$CONFIG_DIR" /var/log/mihomo.log /usr/local/bin/clash; ok "已卸载并清理安装内容"; }
 menu(){ while true; do echo; echo "========== Mihomo + Zashboard 菜单 =========="; echo "1) 开启代理"; echo "2) 关闭代理"; echo "3) 重新导入订阅"; echo "4) 设置/查看密钥"; echo "5) 开启/关闭 TUN 模式"; echo "6) Mixin 配置管理（端口等）"; echo "7) 升级当前或指定内核"; echo "8) 诊断功能"; echo "9) 显示日志"; echo "10) 重启程序"; echo "11) 卸载程序"; echo "12) 显示 Zashboard 地址和密钥"; echo "0) 退出"; read -r -p "请选择：" n; case "$n" in 1) proxy_on;; 2) proxy_off;; 3) import_sub;; 4) secret_menu;; 5) tun_menu;; 6) mixin_menu;; 7) upgrade_core;; 8) diagnose;; 9) logs;; 10) root; restart;; 11) uninstall; exit 0;; 12) show_access;; 0) exit 0;; *) warn "无效选择";; esac; done; }
 case "${1:-menu}" in on) proxy_on;; off) proxy_off;; sub) import_sub;; secret) secret_menu;; tun) tun_menu;; mixin) mixin_menu;; upgrade) upgrade_core;; doctor|diagnose) diagnose;; log|logs) logs;; restart) root; restart;; uninstall) uninstall;; ui|status) show_access;; menu|*) menu;; esac
@@ -385,6 +398,7 @@ main(){
   download_mihomo "$arch" "$tmp"
   download_zashboard "$tmp"
   import_subscription
+  validate_config
   install_service
   install_cli
   success "安装完成，已设置开机自启"
