@@ -6,36 +6,36 @@
 
 ## 一键安装
 
-国内网络建议使用 GitHub 加速地址拉取安装脚本。下面 3 个任选一个，把 `你的GitHub用户名` 替换成你的真实 GitHub 用户名。
+国内网络建议使用 GitHub 加速地址拉取安装脚本。下面 3 个任选一个，把 `jiumian8` 替换成你的真实 GitHub 用户名。
 
 ### 方式 1：IPv4 优选加速
 
 ```bash
-bash <(curl -fsSL https://v4.gh-proxy.org/https://raw.githubusercontent.com/你的GitHub用户名/clash-for-linux-install/main/install.sh)
+bash <(curl -fsSL https://v4.gh-proxy.org/https://raw.githubusercontent.com/jiumian8/clash-for-linux-install/main/install.sh)
 ```
 
 ### 方式 2：IPv6 / IPv4 优选加速
 
 ```bash
-bash <(curl -fsSL https://v6.gh-proxy.org/https://raw.githubusercontent.com/你的GitHub用户名/clash-for-linux-install/main/install.sh)
+bash <(curl -fsSL https://v6.gh-proxy.org/https://raw.githubusercontent.com/jiumian8/clash-for-linux-install/main/install.sh)
 ```
 
 ### 方式 3：Fastly CDN 节点加速
 
 ```bash
-bash <(curl -fsSL https://cdn.gh-proxy.org/https://raw.githubusercontent.com/你的GitHub用户名/clash-for-linux-install/main/install.sh)
+bash <(curl -fsSL https://cdn.gh-proxy.org/https://raw.githubusercontent.com/jiumian8/clash-for-linux-install/main/install.sh)
 ```
 
 也可以直连 GitHub：
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/你的GitHub用户名/clash-for-linux-install/main/install.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/jiumian8/clash-for-linux-install/main/install.sh)
 ```
 
 如果你是先 clone 本仓库，也可以执行：
 
 ```bash
-git clone https://github.com/你的GitHub用户名/clash-for-linux-install.git
+git clone https://github.com/jiumian8/clash-for-linux-install.git
 cd clash-for-linux-install
 sudo bash install.sh
 ```
